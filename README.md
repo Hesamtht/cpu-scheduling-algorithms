@@ -1,4 +1,4 @@
-CPU Scheduling Algorithms
+CPU Scheduling Algorithms with Django
 
 ## Introduction
 
