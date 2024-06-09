@@ -1,0 +1,82 @@
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banker's Algorithm</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'scheduler/banker.css' %}">
+    <script>
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie('csrftoken');
+    </script>
+</head>
+<body>
+    <div class="container">
+        <button onclick="window.location.href='/'" class="home-button">Return Home</button>
+        <h1>Banker's Algorithm</h1>
+        <form id="banker-form">
+            {% csrf_token %}
+            <label for="max_capacity">Max Capacity (comma separated values for each row):</label><br>
+            <textarea id="max_capacity" name="max_capacity" required></textarea><br><br>
+            <label for="allocation">Allocation (comma separated values for each row):</label><br>
+            <textarea id="allocation" name="allocation" required></textarea><br><br>
+            <label for="available">Available (comma separated values):</label><br>
+            <input type="text" id="available" name="available" required><br><br>
+            <button type="submit" class="add-button">Run Banker's Algorithm</button>
+        </form>
+        <h2>Results</h2>
+        <div id="results"></div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const bankerForm = document.getElementById('banker-form');
+            bankerForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const max_capacity = document.getElementById('max_capacity').value.trim().split('\n').map(row => row.split(',').map(Number));
+                const allocation = document.getElementById('allocation').value.trim().split('\n').map(row => row.split(',').map(Number));
+                const available = document.getElementById('available').value.trim().split(',').map(Number);
+
+                fetch("{% url 'run_banker' %}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken,
+                    },
+                    body: JSON.stringify({ max_capacity, allocation, available })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    const resultsDiv = document.getElementById('results');
+                    if (data.error) {
+                        resultsDiv.innerHTML = `<p>Error: ${data.error}</p>`;
+                    } else {
+                        resultsDiv.innerHTML = `
+                            <p>Max Capacity Matrix: ${JSON.stringify(data.max_matrix)}</p>
+                            <p>Allocation Matrix: ${JSON.stringify(data.allocation_matrix)}</p>
+                            <p>Available Matrix: ${JSON.stringify(data.available_matrix)}</p>
+                            <p>Need Matrix: ${JSON.stringify(data.need_matrix)}</p>
+                            <p>Is Safe: ${data.is_safe}</p>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

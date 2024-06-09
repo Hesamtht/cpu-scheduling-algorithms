@@ -1,0 +1,84 @@
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deadlock Detection</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'scheduler/index.css' %}">
+    <script>
+        // Function to get the CSRF token from the cookie
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    // Does this cookie string begin with the name we want?
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        const csrftoken = getCookie('csrftoken');
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Deadlock Detection</h1>
+        <form id="deadlock-form">
+            {% csrf_token %}
+            <label for="num_processes">Number of Processes:</label>
+            <input type="number" id="num_processes" name="num_processes" required><br><br>
+
+            <label for="num_resources">Number of Resources:</label>
+            <input type="number" id="num_resources" name="num_resources" required><br><br>
+
+            <label for="allocation">Allocation Matrix (comma-separated values for each process):</label>
+            <textarea id="allocation" name="allocation" rows="4" required></textarea><br><br>
+
+            <label for="request">Request Matrix (comma-separated values for each process):</label>
+            <textarea id="request" name="request" rows="4" required></textarea><br><br>
+
+            <label for="available">Available Resources (comma-separated values):</label>
+            <input type="text" id="available" name="available" required><br><br>
+
+            <button type="submit" class="add-button">Detect Deadlock</button>
+        </form>
+        <h2>Results</h2>
+        <div id="results"></div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const deadlockForm = document.getElementById('deadlock-form');
+            const resultsDiv = document.getElementById('results');
+
+            deadlockForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const formData = new FormData(deadlockForm);
+                const data = Object.fromEntries(formData.entries());
+                console.log('Detecting deadlock with data:', data);  // Debugging step
+                try {
+                    const response = await fetch('/deadlock_detection/', {
+                        method: 'POST',
+                        body: JSON.stringify(data),
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrftoken  // Include CSRF token
+                        }
+                    });
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    const result = await response.json();
+                    console.log('Deadlock detection result:', result);  // Debugging step
+                    resultsDiv.innerHTML = `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+                } catch (error) {
+                    console.error('Deadlock detection failed:', error);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f8f9fa;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #b18c8c;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+h1, h2 {
+    color: #343a40;
+}
+
+form {
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+input, select, button {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+button.add-button {
+    background-color: green;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+button.add-button:hover {
+    background-color: darkgreen;
+}
+
+button.delete-button {
+    background-color: red;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+button.delete-button:hover {
+    background-color: darkred;
+}
+
+button.elevator-button,
+button.round-robin-button,
+button.banker-button,
+button.home-button {
+    background-color: purple;
+    color: white;
+    border: none;
+    cursor: pointer;
+    margin-bottom: 20px;
+}
+
+button.elevator-button:hover,
+button.round-robin-button:hover,
+button.banker-button:hover,
+button.home-button:hover {
+    background-color: #5d0b5d;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+table, th, td {
+    border: 1px solid #dee2e6;
+}
+
+th, td {
+    padding: 8px;
+    text-align: left;
+}
+
+th {
+    background-color: #e9ecef;
+}
+
+#results h3 {
+    margin: 10px 0;
+}

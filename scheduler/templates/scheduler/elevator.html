@@ -1,0 +1,126 @@
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elevator Simulation</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'scheduler/elevator.css' %}">
+    <script>
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        const csrftoken = getCookie('csrftoken');
+    </script>
+</head>
+<body>
+    <div class="container">
+        <button class="elevator-button" onclick="window.location.href='{% url 'index' %}'">Back to CPU Scheduler</button>
+        <h1>Elevator Simulation</h1>
+        <form id="elevator-form">
+            {% csrf_token %}
+            <label for="num_floors">Number of Floors:</label>
+            <input type="number" id="num_floors" name="num_floors" required><br><br>
+            <label for="elevator_capacity">Elevator Capacity:</label>
+            <input type="number" id="elevator_capacity" name="elevator_capacity" required><br><br>
+            <label for="num_requests">Number of Requests:</label>
+            <input type="number" id="num_requests" name="num_requests" required><br><br>
+            <button type="submit">Run Simulation</button>
+        </form>
+        <h2>Results</h2>
+        <div id="results"></div>
+        <div id="chart-container"></div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const elevatorForm = document.getElementById('elevator-form');
+            const resultsDiv = document.getElementById('results');
+            const chartContainer = document.getElementById('chart-container');
+
+            elevatorForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const formData = new FormData(elevatorForm);
+                const data = Object.fromEntries(formData.entries());
+                console.log('Running elevator with data:', data);
+                try {
+                    const response = await fetch('/run_elevator/', {
+                        method: 'POST',
+                        body: JSON.stringify(data),
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrftoken
+                        }
+                    });
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    const result = await response.json();
+                    console.log('Elevator result:', result);
+
+                    // Display results
+                    resultsDiv.innerHTML = `
+                        <h3>Last Floor: ${result.last_floor}</h3>
+                        <h3>Average Position: ${result.avg_position}</h3>
+                        <h3>Lower Floors: ${result.lower_floors.join(', ')}</h3>
+                        <h3>Upper Floors: ${result.upper_floors.join(', ')}</h3>
+                        <h3>All Requests: ${result.all_requests.join(', ')}</h3>
+                    `;
+
+                    // Render chart (this requires a charting library, e.g., Chart.js)
+                    chartContainer.innerHTML = '';  // Clear previous chart
+                    const ctx = document.createElement('canvas');
+                    chartContainer.appendChild(ctx);
+                    const dataPoints = [0].concat(result.lower_floors).concat(result.upper_floors);
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: dataPoints.map((_, index) => index),
+                            datasets: [{
+                                label: 'Elevator Movement',
+                                data: dataPoints,
+                                fill: false,
+                                borderColor: 'rgba(0, 0, 0, 1)',
+                                tension: 0.1,
+                                pointRadius: 5,
+                                pointBackgroundColor: 'rgba(75, 192, 192, 1)'
+                            }]
+                        },
+                        options: {
+                            animation: {
+                                duration: 3000, // Animation duration in milliseconds (3 seconds)
+                                easing: 'easeInOutQuad' // Animation easing function
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        stepSize: 1
+                                    }
+                                },
+                                x: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        stepSize: 1
+                                    }
+                                }
+                            }
+                        }
+                    });
+                } catch (error) {
+                    console.error('Run elevator failed:', error);
+                }
+            });
+        });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</body>
+</html>

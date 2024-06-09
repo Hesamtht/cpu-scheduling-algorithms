@@ -1,0 +1,144 @@
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MLFQ Scheduler</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'scheduler/mlfq.css' %}">
+    <script>
+        // Function to get the CSRF token from the cookie
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    // Does this cookie string begin with the name we want?
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        const csrftoken = getCookie('csrftoken');
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>MLFQ Scheduler</h1>
+        <form id="process-form">
+            {% csrf_token %}
+            <label for="name">Process Name:</label>
+            <input type="text" id="name" name="name" required><br><br>
+            <label for="arrival_time">Arrival Time:</label>
+            <input type="number" id="arrival_time" name="arrival_time" required><br><br>
+            <label for="burst_time">Burst Time:</label>
+            <input type="number" id="burst_time" name="burst_time" required><br><br>
+            <label for="priority">Priority:</label>
+            <input type="number" id="priority" name="priority" required><br><br>
+            <button type="submit">Add Process</button>
+        </form>
+        <h2>Processes</h2>
+        <table id="process-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Arrival Time</th>
+                    <th>Burst Time</th>
+                    <th>Priority</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Processes will be populated here -->
+            </tbody>
+        </table>
+        <h2>Schedule</h2>
+        <button id="compute-schedule">Compute MLFQ Schedule</button>
+        <h2>Results</h2>
+        <div id="results"></div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const processForm = document.getElementById('process-form');
+            const computeScheduleButton = document.getElementById('compute-schedule');
+            const processTable = document.getElementById('process-table').getElementsByTagName('tbody')[0];
+            const resultsDiv = document.getElementById('results');
+
+            async function fetchProcesses() {
+                try {
+                    const response = await fetch('/mlfq_get_processes/');
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    const processes = await response.json();
+                    processTable.innerHTML = '';
+                    processes.forEach(process => {
+                        const row = processTable.insertRow();
+                        row.insertCell(0).textContent = process.name;
+                        row.insertCell(1).textContent = process.arrival_time;
+                        row.insertCell(2).textContent = process.burst_time;
+                        row.insertCell(3).textContent = process.priority;
+                    });
+                } catch (error) {
+                    console.error('Fetch processes failed:', error);
+                }
+            }
+
+            processForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const formData = new FormData(processForm);
+                const data = Object.fromEntries(formData.entries());
+                console.log('Adding process:', data);  // Debugging step
+                try {
+                    const response = await fetch('/mlfq_add_process/', {
+                        method: 'POST',
+                        body: JSON.stringify(data),
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrftoken  // Include CSRF token
+                        }
+                    });
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    fetchProcesses();
+                    processForm.reset();
+                } catch (error) {
+                    console.error('Add process failed:', error);
+                }
+            });
+
+            computeScheduleButton.addEventListener('click', async function() {
+                console.log('Computing MLFQ schedule');  // Debugging step
+                try {
+                    const response = await fetch('/mlfq_schedule/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrftoken  // Include CSRF token
+                        }
+                    });
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    const result = await response.json();
+                    console.log('Schedule result:', result);  // Debugging step
+                    resultsDiv.innerHTML = `<h3>Average Waiting Time: ${result.avg_wt}</h3><h3>Average Turn Around Time: ${result.avg_tat}</h3>`;
+                    const table = document.createElement('table');
+                    table.innerHTML = `<thead><tr><th>Process</th><th>Waiting Time</th><th>Turn Around Time</th></thead>`;
+                    const tbody = document.createElement('tbody');
+                    result.result.forEach(proc => {
+                        const row = tbody.insertRow();
+                        row.insertCell(0).textContent = proc.name;
+                        row.insertCell(1).textContent = proc.waiting_time;
+                        row.insertCell(2).textContent = proc.turn_around_time;
+                    });
+                    table.appendChild(tbody);
+                    resultsDiv.appendChild(table);
+                } catch (error) {
+                    console.error('Compute schedule failed:', error);
+                }
+            });
+
+            fetchProcesses();
+        });
+    </script>
+</body>
+</html>
