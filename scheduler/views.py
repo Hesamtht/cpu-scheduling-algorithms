@@ -146,3 +146,6 @@ def run_banker(request):
 
         return JsonResponse(result)
     return JsonResponse({'error': 'Invalid request method'}, status=400)
+
+def calculator(request):
+    return render(request, 'scheduler/calculator.html')
