@@ -17,4 +17,5 @@ urlpatterns = [
     path('round_robin_schedule/', views.round_robin_schedule, name='round_robin_schedule'),
     path('banker/', views.banker_view, name='banker'),
     path('run_banker/', views.run_banker, name='run_banker'),
+    path('calculator/', views.calculator, name='calculator'),
 ]
