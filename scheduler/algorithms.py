@@ -64,57 +64,54 @@ def mlfq_algorithm(n, process_list):
 
     ghant = [-1] * total_execution_time
 
-    pq = []
-    rq = deque()
-    cpu_state = 0
+    pq = []                 # level 0: priority queue (highest priority runs first)
+    rq = deque()            # level 1: round-robin queue (demoted processes)
     quantum = 4
-    current = ProcessData(-2, -2, 0, 0, 999999)
+    current = None          # process currently on the CPU (None == idle)
+    current_in_rq = False   # True if the running process came from the rq level
+    q_left = 0              # quantum ticks left for the running process
 
     for clock in range(total_execution_time):
+        # admit every process that arrives at this tick into level 0
         for j in range(n):
             if clock == input_data[j].a_time:
                 heapq.heappush(pq, Compare(input_data[j]))
 
-        if cpu_state == 0:
+        # a ready level-0 process preempts a running level-1 process
+        if current is not None and current_in_rq and pq:
+            rq.append(current)
+            current = None
+
+        # within level 0, a strictly higher-priority arrival preempts the current process
+        if current is not None and not current_in_rq and pq:
+            if pq[0].process.priority > current.priority:
+                heapq.heappush(pq, Compare(current))
+                current = None
+
+        # dispatch the CPU if it is idle: prefer level 0, then level 1
+        if current is None:
             if pq:
                 current = heapq.heappop(pq).process
-                cpu_state = 1
-                pq_process = 1
-                quantum = 4
+                current_in_rq = False
+                q_left = quantum
             elif rq:
                 current = rq.popleft()
-                cpu_state = 1
-                rq_process = 1
-                quantum = 4
-        elif cpu_state == 1:
-            if pq_process == 1 and pq:
-                if pq[0].process.priority < current.priority:
-                    rq.append(current)
-                    current = heapq.heappop(pq).process
-                    quantum = 4
-            elif rq_process == 1 and pq:
-                rq.append(current)
-                current = heapq.heappop(pq).process
-                rq_process = 0
-                pq_process = 1
-                quantum = 4
+                current_in_rq = True
+                q_left = quantum
 
-        if current.pid != -2:
+        # run the chosen process for one tick
+        if current is not None:
             current.r_time -= 1
-            quantum -= 1
+            q_left -= 1
             ghant[clock] = current.pid
+
             if current.r_time == 0:
-                cpu_state = 0
-                quantum = 4
-                current = ProcessData(-2, -2, 0, 0, 999999)
-                rq_process = 0
-                pq_process = 0
-            elif quantum == 0:
+                # finished
+                current = None
+            elif q_left == 0:
+                # quantum expired: demote to (or keep in) the round-robin level
                 rq.append(current)
-                current = ProcessData(-2, -2, 0, 0, 999999)
-                rq_process = 0
-                pq_process = 0
-                cpu_state = 0
+                current = None
 
     input_data.sort(key=idsort)
 
