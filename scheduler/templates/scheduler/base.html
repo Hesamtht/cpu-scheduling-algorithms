@@ -1,0 +1,54 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}CPU Scheduler Lab{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'scheduler/app.css' %}?v=2">
+    <script>
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie('csrftoken');
+    </script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="aurora" aria-hidden="true"></div>
+
+    <nav class="nav">
+        <a class="nav__brand" href="/">
+            <span class="nav__dot"></span> CPU&nbsp;Scheduler&nbsp;Lab
+        </a>
+        <div class="nav__links">
+            <a class="nav__link" href="/">Scheduler</a>
+            <a class="nav__link" href="/round_robin/">Round Robin</a>
+            <a class="nav__link" href="/mlfq/">MLFQ</a>
+            <a class="nav__link" href="/banker/">Banker's</a>
+            <a class="nav__link" href="/elevator/">Elevator</a>
+        </div>
+    </nav>
+
+    <main class="page">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="{% static 'scheduler/app.js' %}?v=2"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

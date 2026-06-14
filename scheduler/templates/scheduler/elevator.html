@@ -1,126 +1,119 @@
-{% load static %}
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Elevator Simulation</title>
-    <link rel="stylesheet" type="text/css" href="{% static 'scheduler/elevator.css' %}">
-    <script>
-        function getCookie(name) {
-            let cookieValue = null;
-            if (document.cookie && document.cookie !== '') {
-                const cookies = document.cookie.split(';');
-                for (let i = 0; i < cookies.length; i++) {
-                    const cookie = cookies[i].trim();
-                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                        break;
-                    }
-                }
-            }
-            return cookieValue;
-        }
+{% extends 'scheduler/base.html' %}
 
-        const csrftoken = getCookie('csrftoken');
-    </script>
-</head>
-<body>
-    <div class="container">
-        <button class="elevator-button" onclick="window.location.href='{% url 'index' %}'">Back to CPU Scheduler</button>
-        <h1>Elevator Simulation</h1>
+{% block title %}Elevator / Disk LOOK Simulation{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <span class="hero__eyebrow">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v18M16 3v18M8 7l-3 3 3 3M16 17l3-3-3-3"/></svg>
+        LOOK Disk Scheduling
+    </span>
+    <h1>Elevator Simulation</h1>
+    <p>The head sweeps down to service every request below it, then reverses and sweeps up — the LOOK strategy. The chart traces the head's path; total seek distance is the sum of all movement.</p>
+</section>
+
+<div class="grid grid--2">
+    <div class="card">
+        <h3 class="card__title"><span class="card__icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/></svg></span>Configure</h3>
+        <p class="card__sub">Requests are generated randomly within the floor range. The head starts at floor&nbsp;0.</p>
         <form id="elevator-form">
             {% csrf_token %}
-            <label for="num_floors">Number of Floors:</label>
-            <input type="number" id="num_floors" name="num_floors" required><br><br>
-            <label for="elevator_capacity">Elevator Capacity:</label>
-            <input type="number" id="elevator_capacity" name="elevator_capacity" required><br><br>
-            <label for="num_requests">Number of Requests:</label>
-            <input type="number" id="num_requests" name="num_requests" required><br><br>
-            <button type="submit">Run Simulation</button>
+            <div class="field">
+                <label for="num_floors">Number of Floors</label>
+                <input type="number" id="num_floors" name="num_floors" min="2" placeholder="200" required>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label for="elevator_capacity">Capacity</label>
+                    <input type="number" id="elevator_capacity" name="elevator_capacity" min="1" placeholder="8" required>
+                </div>
+                <div class="field">
+                    <label for="num_requests">Requests</label>
+                    <input type="number" id="num_requests" name="num_requests" min="1" placeholder="7" required>
+                </div>
+            </div>
+            <button type="submit" class="btn btn--primary btn--block">Run Simulation</button>
         </form>
-        <h2>Results</h2>
-        <div id="results"></div>
-        <div id="chart-container"></div>
     </div>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const elevatorForm = document.getElementById('elevator-form');
-            const resultsDiv = document.getElementById('results');
-            const chartContainer = document.getElementById('chart-container');
 
-            elevatorForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                const formData = new FormData(elevatorForm);
-                const data = Object.fromEntries(formData.entries());
-                console.log('Running elevator with data:', data);
-                try {
-                    const response = await fetch('/run_elevator/', {
-                        method: 'POST',
-                        body: JSON.stringify(data),
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': csrftoken
-                        }
-                    });
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    const result = await response.json();
-                    console.log('Elevator result:', result);
+    <div class="card">
+        <h3 class="card__title"><span class="card__icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 12l4 4 7-9"/></svg></span>Head Movement</h3>
+        <p class="card__sub">Order in which floors are serviced.</p>
+        <div id="results"><p class="hint">Run a simulation to see the path.</p></div>
+        <div id="chart-container" style="display:none;"><canvas id="elevator-chart"></canvas></div>
+    </div>
+</div>
+{% endblock %}
 
-                    // Display results
-                    resultsDiv.innerHTML = `
-                        <h3>Last Floor: ${result.last_floor}</h3>
-                        <h3>Average Position: ${result.avg_position}</h3>
-                        <h3>Lower Floors: ${result.lower_floors.join(', ')}</h3>
-                        <h3>Upper Floors: ${result.upper_floors.join(', ')}</h3>
-                        <h3>All Requests: ${result.all_requests.join(', ')}</h3>
-                    `;
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('elevator-form');
+    const resultsDiv = document.getElementById('results');
+    const chartBox = document.getElementById('chart-container');
+    let chart = null;
 
-                    // Render chart (this requires a charting library, e.g., Chart.js)
-                    chartContainer.innerHTML = '';  // Clear previous chart
-                    const ctx = document.createElement('canvas');
-                    chartContainer.appendChild(ctx);
-                    const dataPoints = [0].concat(result.lower_floors).concat(result.upper_floors);
-                    new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: dataPoints.map((_, index) => index),
-                            datasets: [{
-                                label: 'Elevator Movement',
-                                data: dataPoints,
-                                fill: false,
-                                borderColor: 'rgba(0, 0, 0, 1)',
-                                tension: 0.1,
-                                pointRadius: 5,
-                                pointBackgroundColor: 'rgba(75, 192, 192, 1)'
-                            }]
-                        },
-                        options: {
-                            animation: {
-                                duration: 3000, // Animation duration in milliseconds (3 seconds)
-                                easing: 'easeInOutQuad' // Animation easing function
-                            },
-                            scales: {
-                                y: {
-                                    beginAtZero: true,
-                                    ticks: {
-                                        stepSize: 1
-                                    }
-                                },
-                                x: {
-                                    beginAtZero: true,
-                                    ticks: {
-                                        stepSize: 1
-                                    }
-                                }
-                            }
-                        }
-                    });
-                } catch (error) {
-                    console.error('Run elevator failed:', error);
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const btn = form.querySelector('button');
+        const data = Object.fromEntries(new FormData(form).entries());
+        btn.disabled = true;
+        try {
+            const res = await fetch('/run_elevator/', {
+                method: 'POST', body: JSON.stringify(data),
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken }
+            });
+            const r = await res.json();
+
+            CPUViz.renderStats(resultsDiv, [
+                { label: 'Total Seek', value: r.total_seek, decimals: 0, accent: 'var(--primary)' },
+                { label: 'Last Floor', value: r.last_floor, decimals: 0, accent: 'var(--sky)' },
+                { label: 'Requests', value: r.all_requests.length, decimals: 0, accent: 'var(--violet)' },
+            ]);
+            const order = document.createElement('p');
+            order.className = 'hint';
+            order.style.marginTop = '12px';
+            order.innerHTML = 'Service order: ' + r.seek_sequence.join(' → ');
+            resultsDiv.appendChild(order);
+
+            const seq = r.seek_sequence;
+            chartBox.style.display = 'block';
+            if (chart) chart.destroy();
+            const ctx = document.getElementById('elevator-chart').getContext('2d');
+            const grad = ctx.createLinearGradient(0, 0, 0, 320);
+            grad.addColorStop(0, 'rgba(56,189,248,0.35)');
+            grad.addColorStop(1, 'rgba(56,189,248,0)');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: seq.map(function (_, i) { return 'step ' + i; }),
+                    datasets: [{
+                        label: 'Head position (floor)',
+                        data: seq,
+                        fill: true,
+                        backgroundColor: grad,
+                        borderColor: '#38bdf8',
+                        borderWidth: 2.5,
+                        tension: 0.25,
+                        pointRadius: 5,
+                        pointBackgroundColor: '#22c55e',
+                        pointBorderColor: '#04130a',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: {
+                    animation: { duration: 1400, easing: 'easeInOutQuart' },
+                    plugins: { legend: { labels: { color: '#aab6c8', font: { family: 'Fira Sans' } } } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#6b7a90', font: { family: 'Fira Code' } } },
+                        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6b7a90', font: { family: 'Fira Code' } } }
+                    }
                 }
             });
-        });
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</body>
-</html>
+        } catch (e) { console.error(e); }
+        btn.disabled = false;
+    });
+});
+</script>
+{% endblock %}

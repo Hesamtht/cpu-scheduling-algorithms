@@ -1,144 +1,146 @@
-{% load static %}
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MLFQ Scheduler</title>
-    <link rel="stylesheet" type="text/css" href="{% static 'scheduler/mlfq.css' %}">
-    <script>
-        // Function to get the CSRF token from the cookie
-        function getCookie(name) {
-            let cookieValue = null;
-            if (document.cookie && document.cookie !== '') {
-                const cookies = document.cookie.split(';');
-                for (let i = 0; i < cookies.length; i++) {
-                    const cookie = cookies[i].trim();
-                    // Does this cookie string begin with the name we want?
-                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                        break;
-                    }
-                }
-            }
-            return cookieValue;
-        }
+{% extends 'scheduler/base.html' %}
 
-        const csrftoken = getCookie('csrftoken');
-    </script>
-</head>
-<body>
-    <div class="container">
-        <h1>MLFQ Scheduler</h1>
+{% block title %}MLFQ Scheduler{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <span class="hero__eyebrow">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h6"/></svg>
+        Multi-Level Feedback Queue
+    </span>
+    <h1>MLFQ Scheduler</h1>
+    <p>A priority queue feeds a round-robin queue (quantum&nbsp;4). High-priority arrivals preempt; jobs that exhaust their quantum are demoted to the round-robin level. Higher priority number = higher priority.</p>
+</section>
+
+<div class="grid grid--2">
+    <div class="card">
+        <h3 class="card__title"><span class="card__icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></span>Add Process</h3>
+        <p class="card__sub">Arrival, burst, and priority per job.</p>
         <form id="process-form">
             {% csrf_token %}
-            <label for="name">Process Name:</label>
-            <input type="text" id="name" name="name" required><br><br>
-            <label for="arrival_time">Arrival Time:</label>
-            <input type="number" id="arrival_time" name="arrival_time" required><br><br>
-            <label for="burst_time">Burst Time:</label>
-            <input type="number" id="burst_time" name="burst_time" required><br><br>
-            <label for="priority">Priority:</label>
-            <input type="number" id="priority" name="priority" required><br><br>
-            <button type="submit">Add Process</button>
+            <div class="field">
+                <label for="name">Process Name</label>
+                <input type="text" id="name" name="name" placeholder="e.g. P1" required>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label for="arrival_time">Arrival Time</label>
+                    <input type="number" id="arrival_time" name="arrival_time" min="0" placeholder="0" required>
+                </div>
+                <div class="field">
+                    <label for="burst_time">Burst Time</label>
+                    <input type="number" id="burst_time" name="burst_time" min="1" placeholder="5" required>
+                </div>
+            </div>
+            <div class="field">
+                <label for="priority">Priority <span class="muted">(higher = more important)</span></label>
+                <input type="number" id="priority" name="priority" min="0" placeholder="1" required>
+            </div>
+            <button type="submit" class="btn btn--block">Add to Queue</button>
         </form>
-        <h2>Processes</h2>
-        <table id="process-table">
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Arrival Time</th>
-                    <th>Burst Time</th>
-                    <th>Priority</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Processes will be populated here -->
-            </tbody>
-        </table>
-        <h2>Schedule</h2>
-        <button id="compute-schedule">Compute MLFQ Schedule</button>
-        <h2>Results</h2>
-        <div id="results"></div>
+
+        <hr class="divider">
+        <button id="compute-schedule" class="btn btn--primary btn--block">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+            Compute MLFQ Schedule
+        </button>
     </div>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const processForm = document.getElementById('process-form');
-            const computeScheduleButton = document.getElementById('compute-schedule');
-            const processTable = document.getElementById('process-table').getElementsByTagName('tbody')[0];
-            const resultsDiv = document.getElementById('results');
 
-            async function fetchProcesses() {
-                try {
-                    const response = await fetch('/mlfq_get_processes/');
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    const processes = await response.json();
-                    processTable.innerHTML = '';
-                    processes.forEach(process => {
-                        const row = processTable.insertRow();
-                        row.insertCell(0).textContent = process.name;
-                        row.insertCell(1).textContent = process.arrival_time;
-                        row.insertCell(2).textContent = process.burst_time;
-                        row.insertCell(3).textContent = process.priority;
-                    });
-                } catch (error) {
-                    console.error('Fetch processes failed:', error);
-                }
-            }
+    <div class="card">
+        <h3 class="card__title"><span class="card__icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></span>Process Queue</h3>
+        <p class="card__sub">Jobs waiting to be scheduled.</p>
+        <div class="table-wrap">
+            <table class="data" id="process-table">
+                <thead><tr><th>Name</th><th>Arrival</th><th>Burst</th><th>Priority</th><th></th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
-            processForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                const formData = new FormData(processForm);
-                const data = Object.fromEntries(formData.entries());
-                console.log('Adding process:', data);  // Debugging step
-                try {
-                    const response = await fetch('/mlfq_add_process/', {
-                        method: 'POST',
-                        body: JSON.stringify(data),
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': csrftoken  // Include CSRF token
-                        }
-                    });
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    fetchProcesses();
-                    processForm.reset();
-                } catch (error) {
-                    console.error('Add process failed:', error);
-                }
-            });
+<div class="card" id="results-card" style="margin-top:20px; display:none;">
+    <h3 class="card__title"><span class="card__icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>Results</h3>
+    <div id="stats"></div>
+    <div id="gantt"></div>
+    <hr class="divider">
+    <div id="results"></div>
+</div>
+{% endblock %}
 
-            computeScheduleButton.addEventListener('click', async function() {
-                console.log('Computing MLFQ schedule');  // Debugging step
-                try {
-                    const response = await fetch('/mlfq_schedule/', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': csrftoken  // Include CSRF token
-                        }
-                    });
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    const result = await response.json();
-                    console.log('Schedule result:', result);  // Debugging step
-                    resultsDiv.innerHTML = `<h3>Average Waiting Time: ${result.avg_wt}</h3><h3>Average Turn Around Time: ${result.avg_tat}</h3>`;
-                    const table = document.createElement('table');
-                    table.innerHTML = `<thead><tr><th>Process</th><th>Waiting Time</th><th>Turn Around Time</th></thead>`;
-                    const tbody = document.createElement('tbody');
-                    result.result.forEach(proc => {
-                        const row = tbody.insertRow();
-                        row.insertCell(0).textContent = proc.name;
-                        row.insertCell(1).textContent = proc.waiting_time;
-                        row.insertCell(2).textContent = proc.turn_around_time;
-                    });
-                    table.appendChild(tbody);
-                    resultsDiv.appendChild(table);
-                } catch (error) {
-                    console.error('Compute schedule failed:', error);
-                }
-            });
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const processForm = document.getElementById('process-form');
+    const computeBtn = document.getElementById('compute-schedule');
+    const tbody = document.querySelector('#process-table tbody');
+    const resultsCard = document.getElementById('results-card');
 
-            fetchProcesses();
+    async function fetchProcesses() {
+        const res = await fetch('/mlfq_get_processes/');
+        const procs = await res.json();
+        tbody.innerHTML = '';
+        if (!procs.length) {
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="5">No processes yet — add one to begin.</td></tr>';
+            return;
+        }
+        procs.forEach(function (p) {
+            const tr = tbody.insertRow();
+            tr.insertCell(0).innerHTML = '<span class="pname"><span class="dot" style="color:' + CPUViz.colorFor(p.name) + ';background:' + CPUViz.colorFor(p.name) + '"></span>P' + p.name + '</span>';
+            tr.insertCell(1).textContent = p.arrival_time;
+            tr.insertCell(2).textContent = p.burst_time;
+            tr.insertCell(3).innerHTML = '<span class="chip">' + p.priority + '</span>';
+            const del = tr.insertCell(4);
+            del.style.textAlign = 'right';
+            const b = document.createElement('button');
+            b.className = 'btn-icon-del';
+            b.title = 'Delete';
+            b.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>';
+            b.addEventListener('click', function () { deleteProcess(p.id); });
+            del.appendChild(b);
         });
-    </script>
-</body>
-</html>
+    }
+
+    async function deleteProcess(id) {
+        await fetch('/delete_process/' + id + '/', { method: 'DELETE', headers: { 'X-CSRFToken': csrftoken } });
+        fetchProcesses();
+    }
+
+    processForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(processForm).entries());
+        await fetch('/mlfq_add_process/', {
+            method: 'POST', body: JSON.stringify(data),
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken }
+        });
+        processForm.reset();
+        fetchProcesses();
+        document.getElementById('name').focus();
+    });
+
+    computeBtn.addEventListener('click', async function () {
+        computeBtn.disabled = true;
+        try {
+            const res = await fetch('/mlfq_schedule/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken }
+            });
+            const r = await res.json();
+            if (!r.result || !r.result.length) { computeBtn.disabled = false; return; }
+            resultsCard.style.display = 'block';
+            CPUViz.renderGantt(document.getElementById('gantt'), r.gantt);
+            CPUViz.renderStats(document.getElementById('stats'), [
+                { label: 'Avg Waiting Time', value: r.avg_wt, accent: 'var(--amber)' },
+                { label: 'Avg Turnaround', value: r.avg_tat, accent: 'var(--sky)' },
+                { label: 'Processes', value: r.result.length, decimals: 0, accent: 'var(--violet)' },
+                { label: 'Total Time', value: r.gantt[r.gantt.length - 1].end, decimals: 0, accent: 'var(--primary)' },
+            ]);
+            CPUViz.renderResultTable(document.getElementById('results'), r.result);
+            resultsCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } catch (e) { console.error(e); }
+        computeBtn.disabled = false;
+    });
+
+    fetchProcesses();
+});
+</script>
+{% endblock %}
