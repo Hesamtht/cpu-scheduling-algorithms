@@ -53,6 +53,50 @@ document.addEventListener('DOMContentLoaded', function () {
     const resultsDiv = document.getElementById('results');
     const chartBox = document.getElementById('chart-container');
     let chart = null;
+    let lastSeq = null;
+
+    function buildChart(seq, animate) {
+        if (chart) chart.destroy();
+        const primary = CPUViz.cssVar('--primary') || '#4f46e5';
+        const point = CPUViz.cssVar('--p2') || '#10b981';
+        const text = CPUViz.cssVar('--text-dim') || '#666';
+        const grid = CPUViz.cssVar('--border') || 'rgba(120,120,120,0.2)';
+        const ctx = document.getElementById('elevator-chart').getContext('2d');
+        const grad = ctx.createLinearGradient(0, 0, 0, 320);
+        grad.addColorStop(0, primary + '40');
+        grad.addColorStop(1, primary + '00');
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: seq.map(function (_, i) { return 'step ' + i; }),
+                datasets: [{
+                    label: 'Head position (floor)',
+                    data: seq,
+                    fill: true,
+                    backgroundColor: grad,
+                    borderColor: primary,
+                    borderWidth: 2.5,
+                    tension: 0.25,
+                    pointRadius: 5,
+                    pointBackgroundColor: point,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }]
+            },
+            options: {
+                animation: animate ? { duration: 1400, easing: 'easeInOutQuart' } : false,
+                plugins: { legend: { labels: { color: text, font: { family: 'Inter' } } } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: grid }, ticks: { color: text, font: { family: 'JetBrains Mono' } } },
+                    x: { grid: { color: grid }, ticks: { color: text, font: { family: 'JetBrains Mono' } } }
+                }
+            }
+        });
+    }
+
+    document.addEventListener('themechange', function () {
+        if (lastSeq) buildChart(lastSeq, false);
+    });
 
     form.addEventListener('submit', async function (e) {
         e.preventDefault();
@@ -67,50 +111,19 @@ document.addEventListener('DOMContentLoaded', function () {
             const r = await res.json();
 
             CPUViz.renderStats(resultsDiv, [
-                { label: 'Total Seek', value: r.total_seek, decimals: 0, accent: 'var(--primary)' },
-                { label: 'Last Floor', value: r.last_floor, decimals: 0, accent: 'var(--sky)' },
-                { label: 'Requests', value: r.all_requests.length, decimals: 0, accent: 'var(--violet)' },
+                { label: 'Total Seek', value: r.total_seek, decimals: 0, accent: 'var(--p0)' },
+                { label: 'Last Floor', value: r.last_floor, decimals: 0, accent: 'var(--p1)' },
+                { label: 'Requests', value: r.all_requests.length, decimals: 0, accent: 'var(--p5)' },
             ]);
             const order = document.createElement('p');
             order.className = 'hint';
             order.style.marginTop = '12px';
-            order.innerHTML = 'Service order: ' + r.seek_sequence.join(' → ');
+            order.textContent = 'Service order: ' + r.seek_sequence.join(' → ');
             resultsDiv.appendChild(order);
 
-            const seq = r.seek_sequence;
+            lastSeq = r.seek_sequence;
             chartBox.style.display = 'block';
-            if (chart) chart.destroy();
-            const ctx = document.getElementById('elevator-chart').getContext('2d');
-            const grad = ctx.createLinearGradient(0, 0, 0, 320);
-            grad.addColorStop(0, 'rgba(56,189,248,0.35)');
-            grad.addColorStop(1, 'rgba(56,189,248,0)');
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: seq.map(function (_, i) { return 'step ' + i; }),
-                    datasets: [{
-                        label: 'Head position (floor)',
-                        data: seq,
-                        fill: true,
-                        backgroundColor: grad,
-                        borderColor: '#38bdf8',
-                        borderWidth: 2.5,
-                        tension: 0.25,
-                        pointRadius: 5,
-                        pointBackgroundColor: '#22c55e',
-                        pointBorderColor: '#04130a',
-                        pointBorderWidth: 2
-                    }]
-                },
-                options: {
-                    animation: { duration: 1400, easing: 'easeInOutQuart' },
-                    plugins: { legend: { labels: { color: '#aab6c8', font: { family: 'Fira Sans' } } } },
-                    scales: {
-                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#6b7a90', font: { family: 'Fira Code' } } },
-                        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6b7a90', font: { family: 'Fira Code' } } }
-                    }
-                }
-            });
+            buildChart(lastSeq, true);
         } catch (e) { console.error(e); }
         btn.disabled = false;
     });

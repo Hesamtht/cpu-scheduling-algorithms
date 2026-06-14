@@ -134,10 +134,10 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('algo-tag').textContent = 'q = ' + data.quantum;
             CPUViz.renderGantt(document.getElementById('gantt'), r.gantt);
             CPUViz.renderStats(document.getElementById('stats'), [
-                { label: 'Avg Waiting Time', value: r.avg_wt, accent: 'var(--amber)' },
-                { label: 'Avg Turnaround', value: r.avg_tat, accent: 'var(--sky)' },
-                { label: 'Quantum', value: data.quantum, decimals: 0, accent: 'var(--violet)' },
-                { label: 'Total Time', value: r.gantt[r.gantt.length - 1].end, decimals: 0, accent: 'var(--primary)' },
+                { label: 'Avg Waiting Time', value: r.avg_wt, accent: 'var(--p3)' },
+                { label: 'Avg Turnaround', value: r.avg_tat, accent: 'var(--p1)' },
+                { label: 'Quantum', value: data.quantum, decimals: 0, accent: 'var(--p5)' },
+                { label: 'Total Time', value: r.gantt[r.gantt.length - 1].end, decimals: 0, accent: 'var(--p2)' },
             ]);
             CPUViz.renderResultTable(document.getElementById('results'), r.result);
             resultsCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

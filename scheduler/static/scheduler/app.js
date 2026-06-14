@@ -8,7 +8,7 @@
     "var(--p0)", "var(--p1)", "var(--p2)", "var(--p3)",
     "var(--p4)", "var(--p5)", "var(--p6)", "var(--p7)",
   ];
-  const HEX = ["#38bdf8", "#a78bfa", "#34d399", "#fbbf24", "#f472b6", "#60a5fa", "#fb923c", "#2dd4bf"];
+  const HEX = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6", "#14b8a6", "#f43f5e"];
 
   let colorMap = {};
   function resetColors() { colorMap = {}; }
@@ -170,7 +170,28 @@
     });
   }
 
-  document.addEventListener("DOMContentLoaded", highlightNav);
+  /* ------------------------------------------------------------ theming */
+  function setTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    try { localStorage.setItem("cpuviz-theme", t); } catch (e) {}
+    document.dispatchEvent(new CustomEvent("themechange", { detail: t }));
+  }
+  function initTheme() {
+    const btn = document.getElementById("theme-toggle");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      const cur = document.documentElement.getAttribute("data-theme") || "light";
+      setTheme(cur === "dark" ? "light" : "dark");
+    });
+  }
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    highlightNav();
+    initTheme();
+  });
 
   window.CPUViz = {
     colorFor: colorFor,
@@ -180,6 +201,8 @@
     renderStats: renderStats,
     renderResultTable: renderResultTable,
     animateNumber: animateNumber,
+    setTheme: setTheme,
+    cssVar: cssVar,
     fmt: fmt,
   };
 })();
