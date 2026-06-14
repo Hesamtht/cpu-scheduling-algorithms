@@ -50,6 +50,153 @@ def insert_process_data(n, process_list):
 
     return input_data
 
+# ---------------------------------------------------------------------------
+# Shared scheduling helpers.
+#
+# Every scheduler produces a per-tick CPU timeline (timeline[t] = the process
+# name running during tick t, or None when the CPU is idle).  A single summary
+# routine then derives every metric and the Gantt chart from that timeline, so
+# the reported numbers are always consistent with the real execution order.
+# ---------------------------------------------------------------------------
+def _normalize(processes):
+    """Accept rows shaped [name, arrival, burst, ...] -> (name, arrival, burst)."""
+    return [(p[0], p[1], p[2]) for p in processes]
+
+
+def _summarize(timeline, procs):
+    """timeline: list of names (or None for idle) per time tick.
+    procs: list of (name, arrival, burst).
+    Returns (result, avg_wt, avg_tat, gantt)."""
+    first_run = {}
+    last_run = {}
+    for t, name in enumerate(timeline):
+        if name is None:
+            continue
+        first_run.setdefault(name, t)
+        last_run[name] = t
+
+    result = []
+    total_wt = 0
+    total_tat = 0
+    for name, arrival, burst in procs:
+        start = first_run.get(name, arrival)
+        completion = last_run.get(name, arrival - 1) + 1
+        turn_around = completion - arrival
+        waiting = turn_around - burst
+        response = start - arrival
+        total_wt += waiting
+        total_tat += turn_around
+        result.append({
+            'name': name,
+            'arrival_time': arrival,
+            'burst_time': burst,
+            'completion_time': completion,
+            'turn_around_time': turn_around,
+            'waiting_time': waiting,
+            'response_time': response,
+        })
+
+    # merge consecutive equal ticks (including idle) into Gantt segments
+    gantt = []
+    for t, name in enumerate(timeline):
+        label = name if name is not None else 'idle'
+        if gantt and gantt[-1]['name'] == label and gantt[-1]['end'] == t:
+            gantt[-1]['end'] = t + 1
+        else:
+            gantt.append({'name': label, 'start': t, 'end': t + 1})
+
+    n = len(procs)
+    avg_wt = total_wt / n if n else 0
+    avg_tat = total_tat / n if n else 0
+    return result, avg_wt, avg_tat, gantt
+
+
+def _fcfs_timeline(procs):
+    timeline = []
+    t = 0
+    for name, arrival, burst in sorted(procs, key=lambda p: (p[1], p[0])):
+        if t < arrival:                       # idle until this process arrives
+            timeline.extend([None] * (arrival - t))
+            t = arrival
+        timeline.extend([name] * burst)
+        t += burst
+    return timeline
+
+
+def _sjf_timeline(procs):
+    rem = {p[0]: p[2] for p in procs}
+    arrival = {p[0]: p[1] for p in procs}
+    done = set()
+    t = 0
+    timeline = []
+    while len(done) < len(procs):
+        ready = [name for name in rem if arrival[name] <= t and name not in done]
+        if not ready:
+            timeline.append(None)
+            t += 1
+            continue
+        name = min(ready, key=lambda x: (rem[x], arrival[x], x))
+        timeline.extend([name] * rem[name])   # non-preemptive: run to completion
+        t += rem[name]
+        done.add(name)
+    return timeline
+
+
+def _srtf_timeline(procs):
+    rem = {p[0]: p[2] for p in procs}
+    arrival = {p[0]: p[1] for p in procs}
+    done = 0
+    t = 0
+    timeline = []
+    while done < len(procs):
+        ready = [name for name in rem if arrival[name] <= t and rem[name] > 0]
+        if not ready:
+            timeline.append(None)
+            t += 1
+            continue
+        name = min(ready, key=lambda x: (rem[x], arrival[x], x))
+        timeline.append(name)
+        rem[name] -= 1
+        t += 1
+        if rem[name] == 0:
+            done += 1
+    return timeline
+
+
+def _rr_timeline(procs, quantum):
+    order = sorted(procs, key=lambda p: (p[1], p[0]))
+    rem = {p[0]: p[2] for p in procs}
+    timeline = []
+    queue = deque()
+    n = len(order)
+    idx = 0
+    t = 0
+    if order and order[0][1] > 0:             # idle until the first arrival
+        timeline.extend([None] * order[0][1])
+        t = order[0][1]
+    while idx < n and order[idx][1] <= t:
+        queue.append(order[idx][0])
+        idx += 1
+    while queue:
+        name = queue.popleft()
+        run = min(quantum, rem[name]) if quantum > 0 else rem[name]
+        timeline.extend([name] * run)
+        t += run
+        rem[name] -= run
+        while idx < n and order[idx][1] <= t:        # admit arrivals during the slice
+            queue.append(order[idx][0])
+            idx += 1
+        if rem[name] > 0:                            # not finished -> back of queue
+            queue.append(name)
+        if not queue and idx < n:                    # CPU idle until next arrival
+            timeline.extend([None] * (order[idx][1] - t))
+            t = order[idx][1]
+            while idx < n and order[idx][1] <= t:
+                queue.append(order[idx][0])
+                idx += 1
+    return timeline
+
+
 def mlfq_algorithm(n, process_list):
     input_data = insert_process_data(n, process_list)
     input_data.sort(key=arrivalsort)
@@ -113,251 +260,49 @@ def mlfq_algorithm(n, process_list):
                 rq.append(current)
                 current = None
 
-    input_data.sort(key=idsort)
-
-    for i in range(n):
-        for k in range(total_execution_time - 1, -1, -1):
-            if ghant[k] == input_data[i].pid:
-                input_data[i].f_time = k + 1
-                break
-
-    for i in range(n):
-        for k in range(total_execution_time):
-            if ghant[k] == input_data[i].pid:
-                input_data[i].s_time = k
-                break
-
     input_data.sort(key=numsort)
-
-    results = []
-    for i in range(n):
-        input_data[i].res_time = input_data[i].s_time - input_data[i].a_time
-        input_data[i].w_time = (input_data[i].f_time - input_data[i].a_time) - input_data[i].b_time
-        results.append((input_data[i].pid, input_data[i].res_time, input_data[i].f_time, input_data[i].w_time))
-
-    return results
+    timeline = [pid if pid != -1 else None for pid in ghant]
+    procs = [(p.pid, p.a_time, p.b_time) for p in input_data]
+    return _summarize(timeline, procs)
 
 def fcfs(processes):
-    def waitingTime(processes, wt):
-        n = len(processes)
-        wt[0] = 0
-        for i in range(1, n):
-            wt[i] = processes[i-1][2] + wt[i-1] - (processes[i][1] - processes[i-1][1])
-            if wt[i] < 0:
-                wt[i] = 0
+    """First Come First Served (non-preemptive, arrival-aware)."""
+    procs = _normalize(processes)
+    return _summarize(_fcfs_timeline(procs), procs)
 
-    def turnAroundTime(processes, wt, tat):
-        for i in range(len(processes)):
-            tat[i] = processes[i][2] + wt[i]
-
-    n = len(processes)
-    wt = [0] * n
-    tat = [0] * n
-    total_wt = 0
-    total_tat = 0
-
-    waitingTime(processes, wt)
-    turnAroundTime(processes, wt, tat)
-
-    result = []
-    for i in range(n):
-        result.append({
-            'name': processes[i][0],
-            'arrival_time': processes[i][1],
-            'burst_time': processes[i][2],
-            'waiting_time': wt[i],
-            'turn_around_time': tat[i]
-        })
-        total_wt += wt[i]
-        total_tat += tat[i]
-
-    avg_wt = total_wt / n
-    avg_tat = total_tat / n
-
-    return result, avg_wt, avg_tat
 
 def rr(processes, quantum):
-    def waitingTime(processes, n, wt, quantum):
-        rem_bt = [0] * n
-        for i in range(n):
-            rem_bt[i] = processes[i][2]
-        t = 0
-        while True:
-            done = True
-            for i in range(n):
-                if rem_bt[i] > 0:
-                    done = False
-                    if rem_bt[i] > quantum:
-                        t += quantum
-                        rem_bt[i] -= quantum
-                    else:
-                        t += rem_bt[i]
-                        wt[i] = t - processes[i][2]
-                        rem_bt[i] = 0
-            if done:
-                break
+    """Round Robin (preemptive, arrival-aware)."""
+    procs = _normalize(processes)
+    return _summarize(_rr_timeline(procs, quantum), procs)
 
-    def turnAroundTime(processes, n, wt, tat):
-        for i in range(n):
-            tat[i] = processes[i][2] + wt[i]
-
-    n = len(processes)
-    wt = [0] * n
-    tat = [0] * n
-    total_wt = 0
-    total_tat = 0
-
-    waitingTime(processes, n, wt, quantum)
-    turnAroundTime(processes, n, wt, tat)
-
-    result = []
-    for i in range(n):
-        result.append({
-            'name': processes[i][0],
-            'arrival_time': processes[i][1],
-            'burst_time': processes[i][2],
-            'waiting_time': wt[i],
-            'turn_around_time': tat[i]
-        })
-        total_wt += wt[i]
-        total_tat += tat[i]
-
-    avg_wt = total_wt / n
-    avg_tat = total_tat / n
-
-    return result, avg_wt, avg_tat
 
 def sjf(process):
-    def waitingTime(process, wt):
-        n = len(process)
-        wt[0] = 0
-        for i in range(1, n):
-            wt[i] = process[i - 1][2] + wt[i - 1]
+    """Shortest Job First (non-preemptive, arrival-aware)."""
+    procs = _normalize(process)
+    return _summarize(_sjf_timeline(procs), procs)
 
-    def turnAroundTime(process, wt, tat):
-        for i in range(len(process)):
-            tat[i] = process[i][2] + wt[i]
-
-    n = len(process)
-    wt = [0] * n
-    tat = [0] * n
-    total_wt = 0
-    total_tat = 0
-
-    waitingTime(process, wt)
-    turnAroundTime(process, wt, tat)
-
-    result = []
-    for i in range(n):
-        result.append({
-            'name': process[i][0],
-            'arrival_time': process[i][1],
-            'burst_time': process[i][2],
-            'waiting_time': wt[i],
-            'turn_around_time': tat[i]
-        })
-        total_wt += wt[i]
-        total_tat += tat[i]
-
-    avg_wt = total_wt / n
-    avg_tat = total_tat / n
-
-    return result, avg_wt, avg_tat
 
 def srtf(process):
-    import sys
-    def waitingTime(process, wt):
-        n = len(process)
-        rt = [0] * n
-
-        for i in range(n):
-            rt[i] = process[i][2]
-
-        complete = 0
-        short = 0
-        current_t = 0
-        min_t = sys.maxsize
-        flag = False
-
-        while complete != n:
-            for i in range(n):
-                if process[i][1] <= current_t and rt[i] < min_t and rt[i] > 0:
-                    min_t = rt[i]
-                    short = i
-                    flag = True
-
-            if not flag:
-                current_t += 1
-                continue
-
-            rt[short] -= 1
-            min_t = rt[short]
-
-            if min_t == 0:
-                min_t = sys.maxsize
-
-            if rt[short] == 0:
-                complete += 1
-                flag = False
-                final_t = current_t + 1
-                wt[short] = final_t - process[short][1] - process[short][2]
-
-                if wt[short] < 0:
-                    wt[short] = 0
-
-            current_t += 1
-
-    def turnAroundTime(process, wt, tat):
-        for i in range(len(process)):
-            tat[i] = process[i][2] + wt[i]
-
-    n = len(process)
-    wt = [0] * n
-    tat = [0] * n
-    total_wt = 0
-    total_tat = 0
-
-    waitingTime(process, wt)
-    turnAroundTime(process, wt, tat)
-
-    result = []
-    for i in range(n):
-        result.append({
-            'name': process[i][0],
-            'arrival_time': process[i][1],
-            'burst_time': process[i][2],
-            'waiting_time': wt[i],
-            'turn_around_time': tat[i]
-        })
-        total_wt += wt[i]
-        total_tat += tat[i]
-
-    avg_wt = total_wt / n
-    avg_tat = total_tat / n
-
-    return result, avg_wt, avg_tat
+    """Shortest Remaining Time First (preemptive SJF, arrival-aware)."""
+    procs = _normalize(process)
+    return _summarize(_srtf_timeline(procs), procs)
 
 def run_elevator_simulation(current_floor, num_requests, requests):
-    lower_floors = []
-    upper_floors = []
+    # LOOK disk scheduling: serve everything below the head (moving down),
+    # then everything at/above the head (moving up).
+    lower_floors = sorted([f for f in requests if f < current_floor], reverse=True)
+    upper_floors = sorted([f for f in requests if f >= current_floor])
 
-    for request_floor in requests:
-        if request_floor < current_floor:
-            lower_floors.append(request_floor)
-        else:
-            upper_floors.append(request_floor)
-
-    lower_floors = sorted(lower_floors, reverse=True)
-    upper_floors = sorted(upper_floors)
-
+    seek_sequence = [current_floor] + lower_floors + upper_floors
     all_floors = lower_floors + upper_floors
-    floor_labels = ['Current Floor'] + lower_floors + upper_floors
-    floor_requests = [current_floor] + lower_floors + upper_floors
 
-    last_floor = all_floors[-1] if all_floors else current_floor
+    last_floor = seek_sequence[-1]
+    total_seek = sum(abs(seek_sequence[i + 1] - seek_sequence[i])
+                     for i in range(len(seek_sequence) - 1))
     avg_position = sum(all_floors) / len(all_floors) if all_floors else current_floor
 
-    return last_floor, avg_position, lower_floors, upper_floors, requests
+    return last_floor, avg_position, lower_floors, upper_floors, requests, total_seek, seek_sequence
 
 # Banker’s Algorithm Implementation
 def max_capacity(max_capacity_matrix):
@@ -375,18 +320,34 @@ def bankers_algorithm(max_capacity_matrix, allocation_matrix, available_matrix):
     available_matrix = remaining_resources(available_matrix)
 
     need = max_matrix - allocation_matrix
-    if np.all(available_matrix >= need[0]):
-        available_matrix += allocation_matrix[0]
-        is_safe = True
-    else:
-        is_safe = False
+    n = len(allocation_matrix)
+
+    # Safety algorithm: repeatedly grant resources to any process whose
+    # remaining need can be met, then reclaim its allocation, until either
+    # every process finishes (safe) or none can proceed (unsafe).
+    work = available_matrix.copy()
+    finish = [False] * n
+    safe_sequence = []
+
+    progress = True
+    while progress:
+        progress = False
+        for i in range(n):
+            if not finish[i] and np.all(need[i] <= work):
+                work = work + allocation_matrix[i]
+                finish[i] = True
+                safe_sequence.append(i)
+                progress = True
+
+    is_safe = all(finish)
 
     return {
         'max_matrix': max_matrix.tolist(),
         'allocation_matrix': allocation_matrix.tolist(),
         'available_matrix': available_matrix.tolist(),
         'need_matrix': need.tolist(),
-        'is_safe': is_safe
+        'is_safe': bool(is_safe),
+        'safe_sequence': [int(i) for i in safe_sequence] if is_safe else []
     }
 
 def calculate_rr():
